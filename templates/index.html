@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dominioz - PIX Gestor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="nav">
+        <div class="container nav-inner">
+            <a class="logo" href="https://www.dominioz.com.br/?id=pix-qrcode">
+                <img src="/static/logo-brz.png" class="logo-img" alt="Dominioz BRZ">
+            </a>
+            {% if usuario_logado %}
+                <div class="nav-links d-flex align-items-center">
+                    <span class="me-3 text-white">Olá, <strong>{{ usuario_logado.nome }}</strong></span>
+                    <button class="btn btn-ghost btn-sm me-2 text-white" data-bs-toggle="modal" data-bs-target="#modalMinhaSenha">Alterar Senha</button>
+                    <a href="/logout" class="btn btn-primary btn-sm text-dark fw-bold">Sair</a>
+                </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container mb-5 mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if not usuario_logado %}
+            <!-- TELA DE LOGIN -->
+            <div class="row justify-content-center mt-5">
+                <div class="col-md-5">
+                    <div class="card card-panel p-5 text-center">
+                        <h1 class="mb-4 font-weight-bold text-white">PIX Gestor</h1>
+                        <h6 class="text-light mt-1">Acesso ao Sistema</h6>
+                        <form action="/login" method="POST" class="text-start">
+                            <div class="mb-3">
+                                <label class="form-label text-white">E-mail</label>
+                                <input type="email" name="email" class="form-control bg-dark text-white border-secondary" required placeholder="seu@email.com">
+                            </div>
+                            <div class="mb-4">
+                                <!-- Div flex para alinhar o label à esquerda e o link à direita -->
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label text-white mb-0">Senha</label>
+                                    <a href="/recuperar-senha" class="text-success text-decoration-none small">Esqueci minha senha</a>
+                                </div>
+                                <input type="password" name="senha" class="form-control bg-dark text-white border-secondary" required placeholder="******">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mb-3 text-dark">Entrar</button>
+                        </form>
+                        <p class="text-light mt-2">Não tem uma conta?<br><a href="/cadastro" class="text-success text-decoration-none fw-bold">Criar uma conta</a></p>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- MODAL ALTERAR SENHA -->
+            <div class="modal fade text-dark" id="modalMinhaSenha" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form action="/alterar-minha-senha" method="POST">
+                            <div class="modal-header">
+                                <h5 class="modal-title fw-bold">Alterar Minha Senha</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Senha Atual</label>
+                                    <input type="password" name="senha_atual" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Nova Senha</label>
+                                    <input type="password" name="nova_senha" class="form-control" minlength="6" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Confirme a Nova Senha</label>
+                                    <input type="password" name="confirmar_senha" class="form-control" minlength="6" required>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-warning fw-bold">Atualizar Senha</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL CHAVE PIX -->
+            <div class="modal fade text-dark" id="modalChavePix" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form action="/salvar-perfil" method="POST" id="formModalChavePix">
+                            <input type="hidden" name="cidade_padrao" value="{{ usuario_logado.cidade_padrao or 'SAO PAULO' }}">
+                            <input type="hidden" name="descricao_padrao" value="{{ usuario_logado.descricao_padrao or '***' }}">
+                            <div class="modal-header">
+                                <h5 class="modal-title fw-bold">Alterar Chave PIX Padrão</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Tipo da Chave PIX</label>
+                                    <select id="tipoChaveSelect" class="form-select" onchange="atualizarMascaraChave(true)">
+                                        <option value="cpf">CPF</option>
+                                        <option value="cnpj">CNPJ</option>
+                                        <option value="email">E-mail</option>
+                                        <option value="telefone">Telefone (Celular)</option>
+                                        <option value="aleatoria">Chave Aleatória (EVP)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Informe a Chave PIX</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text d-none" id="prefixoTelefone">+55</span>
+                                        <input type="text" id="inputChavePixModal" name="chave_pix_padrao" class="form-control" value="{{ usuario_logado.chave_pix_padrao or '' }}" required placeholder="000.000.000-00">
+                                    </div>
+                                    <small class="text-muted" id="dicaChavePix">Digite apenas os números do CPF.</small>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary fw-bold text-dark">Salvar Chave PIX</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAINEL PRINCIPAL -->
+            <div class="row">
+                <!-- CONFIGURAÇÕES DA CONTA -->
+                <div class="col-md-12 mb-4">
+                    <div class="card card-panel">
+                        <h4 class="fw-bold mb-3 text-white">Minhas Configurações e Chave de API</h4>
+                        <div class="row text-white">
+                            <div class="col-md-6">
+                                <p><strong>API Key Atual:</strong></p>
+                                <div class="input-group mb-3">
+                                    <input type="text" class="form-control bg-dark text-white border-secondary" value="{{ usuario_logado.api_key }}" readonly id="apiKeyInput">
+                                    <button class="btn btn-secondary" type="button" id="btnCopiarKey" onclick="copiarApiKey()">Copiar API</button>
+                                    <form action="/regerar-apikey" method="POST" class="d-inline">
+                                        <button class="btn btn-warning ms-1 text-dark fw-bold" type="submit" onclick="return confirm('Recriar a API Key? A chave antiga deixará de funcionar.');">Recriar Key</button>
+                                    </form>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="p-3 bg-dark border border-secondary rounded">
+                                    <h6 class="fw-bold text-white">Consumo Mensal</h6>
+                                    <h3 class="text-white">{{ cota_usada }} / {{ usuario_logado.limite_mensal }} <small class="text-muted fs-6">QR Codes únicos</small></h3>
+                                    <div class="progress mt-2 bg-secondary" style="height: 10px;">
+                                        {% set porc = (cota_usada / usuario_logado.limite_mensal * 100) if usuario_logado.limite_mensal > 0 else 100 %}
+                                        <div class="progress-bar {% if porc > 90 %}bg-danger{% else %}bg-success{% endif %}" style="width: {{ porc }}%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="text-secondary">
+
+                        <form action="/salvar-perfil" method="POST" class="row g-3 text-white">
+                            <div class="col-md-4">
+                                <label class="form-label">Chave PIX</label>
+                                <div class="input-group">
+                                    <input type="text" name="chave_pix_padrao" class="form-control bg-dark text-white border-secondary" value="{{ usuario_logado.chave_pix_padrao or '' }}" readonly placeholder="Nenhuma chave cadastrada">
+                                    <button type="button" class="btn btn-primary fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#modalChavePix">Alterar</button>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Cidade</label>
+                                <input type="text" name="cidade_padrao" class="form-control bg-dark text-white border-secondary" value="{{ usuario_logado.cidade_padrao }}" maxlength="15">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Descrição Padrão</label>
+                                <input type="text" name="descricao_padrao" class="form-control bg-dark text-white border-secondary" value="{{ usuario_logado.descricao_padrao }}" maxlength="25">
+                            </div>
+                            <div class="col-12 text-end">
+                                <button type="submit" class="btn btn-success fw-bold text-dark mt-2">Salvar Dados</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- GERENCIADOR DE COBRANÇAS -->
+                <div class="col-md-12 mb-4">
+                    <div class="card card-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="fw-bold m-0 text-white">📧 Gerenciador de Cobranças PIX</h4>
+                            <button class="btn btn-success fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#modalNovaCobranca">+ Nova Cobrança</button>
+                        </div>
+                        <div class="table-responsive bg-dark rounded border border-secondary p-2">
+                            <table class="table table-dark table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Cliente</th>
+                                        <th>E-mail</th>
+                                        <th>Descrição</th>
+                                        <th>Valor</th>
+                                        <th>Status</th>
+                                        <th>Visualização</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for cob in cobrancas %}
+                                    <tr>
+                                        <td><strong>{{ cob.nome_cliente }}</strong></td>
+                                        <td>{{ cob.email_cliente }}</td>
+                                        <td><code>{{ cob.descricao }}</code></td>
+                                        <td><strong>R$ {{ "%.2f"|format(cob.valor) }}</strong></td>
+                                        <td>
+                                            {% if cob.status == 'pago' %}
+                                                <span class="badge bg-success">Pago</span>
+                                            {% elif cob.status == 'cancelado' %}
+                                                <span class="badge bg-danger">Cancelado</span>
+                                            {% else %}
+                                                <span class="badge bg-warning text-dark">Pendente</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if cob.lido %}
+                                                <span class="badge bg-info text-dark">👁️ Lido</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Não aberto</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <form action="/cobranca/status/{{ cob.id }}" method="POST" class="d-inline">
+                                                    <select name="status" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="this.form.submit()">
+                                                        <option value="pendente" {% if cob.status == 'pendente' %}selected{% endif %}>Pendente</option>
+                                                        <option value="pago" {% if cob.status == 'pago' %}selected{% endif %}>Pago</option>
+                                                        <option value="cancelado" {% if cob.status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+                                                    </select>
+                                                </form>
+                                                <form action="/cobranca/reenviar/{{ cob.id }}" method="POST" class="d-inline">
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary" title="Reenviar E-mail">📧</button>
+                                                </form>
+                                                <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#modalEditarCobranca{{ cob.id }}">Editar</button>
+                                            </div>
+
+                                            <div class="modal fade text-dark" id="modalEditarCobranca{{ cob.id }}" tabindex="-1">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <form action="/cobranca/editar/{{ cob.id }}" method="POST">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title fw-bold">Editar Cobrança</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Nome do Cliente</label>
+                                                                    <input type="text" name="nome_cliente" class="form-control" value="{{ cob.nome_cliente }}" required>
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">E-mail</label>
+                                                                    <input type="email" name="email_cliente" class="form-control" value="{{ cob.email_cliente }}" required>
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label">Valor (R$)</label>
+                                                                    <input type="number" step="0.01" name="valor" class="form-control" value="{{ cob.valor }}" required>
+                                                                </div>
+                                                                <input type="hidden" name="descricao" value="{{ cob.descricao }}">
+                                                            </div>
+                                                            <div class="modal-footer">
+                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                                <button type="submit" class="btn btn-primary fw-bold text-dark">Salvar</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">Nenhuma cobrança enviada.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODAL NOVA COBRANÇA -->
+                <div class="modal fade text-dark" id="modalNovaCobranca" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <form action="/cobranca/nova" method="POST">
+                                <div class="modal-header">
+                                    <h5 class="modal-title fw-bold">Enviar Cobrança</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Nome do Cliente</label>
+                                        <input type="text" name="nome_cliente" class="form-control" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">E-mail</label>
+                                        <input type="email" name="email_cliente" class="form-control" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Descrição (TxID)</label>
+                                        <input type="text" name="descricao" class="form-control" maxlength="25" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Valor (R$)</label>
+                                        <input type="number" step="0.01" name="valor" class="form-control" required>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="submit" class="btn btn-success fw-bold text-dark">Enviar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HISTÓRICO DE REQUISIÇÕES CRIADAS PELA API DO USUÁRIO -->
+                <div class="col-md-12 mb-4">
+                    <div class="card card-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="fw-bold m-0 text-white">📊 Histórico de Registros Criados</h4>
+                            <span class="badge bg-secondary text-white">Últimas {{ logs_usuario|length }} chamadas</span>
+                        </div>
+                        
+                        {% if logs_usuario %}
+                        <div class="table-responsive bg-dark rounded border border-secondary p-2">
+                            <table class="table table-dark table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Data / Hora (UTC-3)</th>
+                                        <th>Valor (R$)</th>
+                                        <th>Tipo de Requisição</th>
+                                        <th>Hash MD5 (Payload)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in logs_usuario %}
+                                    <tr>
+                                        <td>{{ log.criado_em | format_datetime_br }}</td>
+                                        <td><strong>R$ {{ "%.2f"|format(log.valor or 0) }}</strong></td>
+                                        <td>
+                                            {% if log.tipo == 'qrcode' %}
+                                                <span class="badge bg-info text-dark">📷 QR Code (PNG)</span>
+                                            {% else %}
+                                                <span class="badge bg-primary">📋 Payload (Copia & Cola)</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><code>{{ log.payload_md5 }}</code></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-dark text-center border-secondary mb-0 text-muted">
+                            Nenhum registro de QR Code ou Payload gerado ainda.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- INSTRUÇÕES E DOCUMENTAÇÃO DE USO (RESTITUÍDO E ADAPTADO AO TEMA ESCURO) -->
+                <div class="col-md-12 mb-4">
+                    <div class="card card-panel text-white">
+                        <h4 class="fw-bold mb-3">📖 Documentação Técnica, Testador Interativo e Exemplos de Uso</h4>
+                        <!-- Trocado text-muted por text-light -->
+                        <p class="text-light">A API gera o código PIX Copia e Cola ou a Imagem PNG do QR Code estático EMV. O parâmetro <code>descricao</code> é mapeado para o campo <strong>TxID</strong> do PIX (identificador do extrato bancário).</p>
+                        
+                        <!-- ÁREA DE TESTE INTERATIVO -->
+                        <div class="test-box mb-4 bg-dark border border-secondary rounded p-4">
+                            <h5 class="fw-bold text-success mb-3">⚡ Testar Geração em Tempo Real</h5>
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">Valor (R$):</label>
+                                    <input type="number" id="testValor" class="form-control bg-dark text-white border-secondary" step="0.01" value="25.00" placeholder="25.00">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label fw-bold">Descrição / TxID (Identificador):</label>
+                                    <input type="text" id="testDescricao" class="form-control bg-dark text-white border-secondary" value="PEDIDO123" maxlength="25" placeholder="PEDIDO123">
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-primary w-100 fw-bold text-dark" type="button" onclick="executarTeste()">Gerar QR Code & Payload</button>
+                                </div>
+                            </div>
+
+                            <!-- PAINEL DE RESULTADOS DO TESTE -->
+                            <div id="painelResultadoTeste" class="mt-4 p-3 bg-black rounded border border-secondary d-none">
+                                <div class="row align-items-center">
+                                    <div class="col-md-4 text-center border-end border-secondary">
+                                        <h6><strong>QR Code Gerado:</strong></h6>
+                                        <img id="imgQrResult" src="" alt="QR Code PIX" class="img-fluid border rounded bg-white p-2" style="max-width: 200px;">
+                                    </div>
+                                    <div class="col-md-8">
+                                        <h6><strong>Código Copia e Cola (Payload):</strong></h6>
+                                        <div class="input-group mb-2">
+                                            <textarea id="txtPayloadResult" class="form-control bg-dark text-white border-secondary" rows="3" readonly></textarea>
+                                        </div>
+                                        <button id="btnCopiarPayload" class="btn btn-outline-light btn-sm" type="button" onclick="copiarPayloadTeste()">Copiar PIX Copia e Cola</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h5 class="fw-bold mt-4">1. Parâmetros Aceitos nas Rotas</h5>
+                        <div class="table-responsive">
+                            <table class="table table-dark table-bordered align-middle">
+                                <thead class="table-secondary">
+                                    <tr>
+                                        <th class="text-dark">Parâmetro</th>
+                                        <th class="text-dark">Tipo</th>
+                                        <th class="text-dark">Obrigatório</th>
+                                        <th class="text-dark">Descrição</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>api_key</code></td>
+                                        <td>String</td>
+                                        <td><span class="badge bg-danger">Sim</span></td>
+                                        <td>Sua chave única de autenticação de API.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>valor</code></td>
+                                        <td>Decimal/Float</td>
+                                        <td><span class="badge bg-danger">Sim</span></td>
+                                        <td>Valor a ser cobrado. Exemplo: <code>10.50</code> ou <code>10,50</code>.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>descricao</code></td>
+                                        <td>String</td>
+                                        <td><span class="badge bg-secondary">Não</span></td>
+                                        <td>Identificador da transação (TxID) que sairá no extrato. Aceita apenas letras e números (máx. 25 caracteres). Se omitido, usará <code>***</code>.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h5 class="fw-bold mt-4">2. Exemplos Atualizados com os Valores do Formulário acima:</h5>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-success">🔹 <strong>Obter Imagem do QR Code (PNG)</strong></h6>
+                            <p class="mb-1">Endpoint: <code>GET /qrcode</code></p>
+                            <pre class="bg-black text-white p-3 rounded border border-secondary"><code id="codeUrlQr">GET {{ request.host_url }}qrcode?api_key={{ usuario_logado.api_key }}&valor=25.00&descricao=PEDIDO123</code></pre>
+                            <!-- Trocado text-muted por text-light -->
+                            <small class="text-light">Exemplo de inclusão em tag HTML:</small>
+                            <pre class="bg-black text-white p-3 rounded border border-secondary mt-1"><code id="codeHtmlQr">&lt;img src="{{ request.host_url }}qrcode?api_key={{ usuario_logado.api_key }}&valor=25.00&descricao=PEDIDO123" alt="QR Code PIX" /&gt;</code></pre>
+                        </div>
+
+                        <div class="mb-3">
+                            <h6 class="text-success">🔹 <strong>Obter Payload (PIX Copia e Cola em JSON)</strong></h6>
+                            <p class="mb-1">Endpoint: <code>GET /payload</code></p>
+                            <pre class="bg-black text-white p-3 rounded border border-secondary"><code id="codeUrlPayload">GET {{ request.host_url }}payload?api_key={{ usuario_logado.api_key }}&valor=25.00&descricao=PEDIDO123</code></pre>
+                            <!-- Trocado text-muted por text-light -->
+                            <small class="text-light">Retorno JSON de Exemplo:</small>
+                            <pre class="bg-black text-white p-3 rounded border border-secondary mt-1"><code id="codeJsonPayload">{
+  "status": "sucesso",
+  "pix_copia_cola": "000201..."
+}</code></pre>
+                        </div>
+                        
+                        <h5 class="fw-bold mt-4">3. Criar Cobrança e Enviar E-mail via API</h5>
+                        <p class="mb-1">Endpoint: <code>POST /cobranca/criar</code></p>
+                        <!-- Trocado text-muted por text-light -->
+                        <p class="text-light small">Aceita requisições no formato <strong>JSON</strong> ou <strong>Form-Data</strong>. Cria o registro no sistema, gera o PIX e envia o e-mail de cobrança automaticamente para o cliente.</p>
+
+                        <pre class="bg-black text-white p-3 rounded border border-secondary"><code>POST {{ request.host_url }}cobranca/criar
+Content-Type: application/json
+
+{
+  "api_key": "{{ usuario_logado.api_key }}",
+  "nome_cliente": "João da Silva",
+  "email_cliente": "cliente@email.com",
+  "valor": "150.50",
+  "descricao": "FATURA123"
+}</code></pre>
+
+                        <!-- Trocado text-muted por text-light -->
+                        <small class="text-light">Exemplo de Resposta JSON (201 Created):</small>
+                        <pre class="bg-black text-white p-3 rounded border border-secondary mt-1"><code>{
+  "status": "sucesso",
+  "mensagem": "Cobrança criada com sucesso.",
+  "cobranca": {
+    "id": 12,
+    "nome_cliente": "João da Silva",
+    "email_cliente": "cliente@email.com",
+    "descricao": "FATURA123",
+    "valor": 150.5,
+    "valor_formatado": "R$ 150,50",
+    "status": "pendente",
+    "pix_copia_cola": "000201...",
+    "qr_code_url": "{{ request.host_url }}qrcode?api_key={{ usuario_logado.api_key }}&valor=150.50&descricao=FATURA123",
+    "email_enviado": true,
+    "erro_email": null
+  }
+}</code></pre>                    
+                    </div>
+                </div>
+
+                {% if usuario_logado.nivel == 'admin' %}
+                <!-- PAINEL ADMIN -->
+                <div class="col-md-12 mb-4">
+                    <div class="card card-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="fw-bold text-white">Gerenciamento de Usuários (Admin)</h4>
+                        </div>
+                        <div class="table-responsive bg-dark rounded border border-secondary p-2">
+                            <table class="table table-dark table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Nome / Email</th>
+                                        <th>Nível</th>
+                                        <th>Uso do Mês</th>
+                                        <th>Status</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in lista_usuarios %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ item.usuario.nome }}</strong><br>
+                                            <small class="text-muted">{{ item.usuario.email }}</small>
+                                        </td>
+                                        <td><span class="badge {% if item.usuario.nivel == 'admin' %}bg-danger{% else %}bg-secondary{% endif %}">{{ item.usuario.nivel | upper }}</span></td>
+                                        <td><strong>{{ item.cota_usada }}</strong> gerados</td>
+                                        <td>
+                                            {% if item.usuario.ativo %}
+                                                <span class="badge bg-success">Ativo</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Inativo</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <form action="/admin/alternar-status/{{ item.usuario.id }}" method="POST" class="d-inline">
+                                                <button class="btn btn-sm {% if item.usuario.ativo %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                                                    {% if item.usuario.ativo %}Desativar{% else %}Ativar{% endif %}
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <a href="https://www.dominioz.com.br/?id=pix-qrcode" class="logo">
+          <img src="https://www.dominioz.com.br/img/logo.png" alt="Dominioz Telecom" class="logo-img">
+        </a>
+        <p class="muted" style="margin-top:14px;max-width:300px;font-size:.9rem">Hospedagem de alta performance feita para quem leva o digital a sério.</p>
+      </div>
+      <div class="footer-col"><h4>Produtos</h4>
+        <a href="https://www.dominioz.com.br/planos.asp?serv=hospedagem">Hospedagem</a><a href="https://www.dominioz.com.br/planos.asp?serv=vps">VPS Cloud</a><a href="https://www.dominioz.com.br/planos.asp?serv=dedicado">Servidor Dedicado</a><a href="https://www.dominioz.com.br/planos.asp">Registro de domínio</a>
+      </div>
+      <div class="footer-col"><h4>Empresa</h4>
+        <a href="https://www.dominioz.com.br/sobre.asp">Sobre nós</a><a href="https://www.dominioz.com.br/contato.asp">Contato</a>
+      </div>
+      <div class="footer-col"><h4>Suporte</h4>
+        <a href="https://www.dominioz.com.br/status.asp">Saúde Infra/SLA</a><a href="https://controle.dominioz.com.br/">Central de ajuda</a><a href="https://controle.dominioz.com.br/">Documentação</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>©1997-2026 Dominioz Telecom · Dominioz Tecnologia · Todos os direitos reservados.</span>
+      <span>CNPJ 08.432.391/0001-25 · 51.980.814/0001-70 · Pindamonhangaba · SP · Brasil</span>
+    </div>
+  </div>
+</footer>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const apiKeyUser = "{{ usuario_logado.api_key if usuario_logado else '' }}";
+        const hostUrl = "{{ request.host_url }}";
+
+        function copiarApiKey() {
+            var copyText = document.getElementById("apiKeyInput");
+            copyText.select();
+            navigator.clipboard.writeText(copyText.value).then(function() {
+                var btn = document.getElementById("btnCopiarKey");
+                var textoOriginal = btn.innerText;
+                btn.innerText = "Copiado!";
+                setTimeout(function() { btn.innerText = textoOriginal; }, 3000);
+            });
+        }
+
+        async function executarTeste() {
+            const valor = document.getElementById("testValor").value || "25.00";
+            const descricao = document.getElementById("testDescricao").value || "PEDIDO123";
+
+            document.getElementById("codeUrlQr").innerText = `GET ${hostUrl}qrcode?api_key=${apiKeyUser}&valor=${valor}&descricao=${descricao}`;
+            document.getElementById("codeHtmlQr").innerText = `<img src="${hostUrl}qrcode?api_key=${apiKeyUser}&valor=${valor}&descricao=${descricao}" alt="QR Code PIX" />`;
+            document.getElementById("codeUrlPayload").innerText = `GET ${hostUrl}payload?api_key=${apiKeyUser}&valor=${valor}&descricao=${descricao}`;
+
+            try {
+                const response = await fetch(`${hostUrl}payload?api_key=${apiKeyUser}&valor=${valor}&descricao=${descricao}`);
+                const data = await response.json();
+
+                if (data.status === "sucesso") {
+                    document.getElementById("painelResultadoTeste").classList.remove("d-none");
+                    document.getElementById("imgQrResult").src = `${hostUrl}qrcode?api_key=${apiKeyUser}&valor=${valor}&descricao=${descricao}&t=${new Date().getTime()}`;
+                    document.getElementById("txtPayloadResult").value = data.pix_copia_cola;
+                    document.getElementById("codeJsonPayload").innerText = JSON.stringify(data, null, 2);
+                } else {
+                    alert("Erro ao gerar teste: " + data.mensagem);
+                }
+            } catch (err) {
+                alert("Erro ao realizar requisição de teste.");
+            }
+        }
+
+        function copiarPayloadTeste() {
+            const txt = document.getElementById("txtPayloadResult");
+            const btn = document.getElementById("btnCopiarPayload");
+            txt.select();
+            navigator.clipboard.writeText(txt.value).then(function() {
+                const textoOriginal = btn.innerText;
+                btn.innerText = "Copiado!";
+                setTimeout(function() { btn.innerText = textoOriginal; }, 3000);
+            }).catch(function(err) {
+                console.error("Erro ao copiar payload: ", err);
+            });
+        }
+
+        function detectarTipoChave(chave) {
+            if (!chave) return 'cpf';
+            chave = chave.trim();
+            if (chave.includes('@')) return 'email';
+            const regexUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+            if (regexUUID.test(chave)) return 'aleatoria';
+            const apenasNumeros = chave.replace(/\D/g, '');
+            if (apenasNumeros.length === 14) return 'cnpj';
+            if (chave.startsWith('+55') || (apenasNumeros.length === 11 && !chave.includes('.'))) return 'telefone';
+            return 'cpf';
+        }
+
+        function atualizarMascaraChave(limparValor = false) {
+            const tipo = document.getElementById('tipoChaveSelect')?.value;
+            const input = document.getElementById('inputChavePixModal');
+            if (!input) return;
+            if (limparValor) input.value = '';
+            document.getElementById('prefixoTelefone')?.classList.add('d-none');
+            input.removeAttribute('maxlength');
+
+            if (tipo === 'cpf') { input.placeholder = '000.000.000-00'; input.maxLength = 14; }
+            else if (tipo === 'cnpj') { input.placeholder = '00.000.000/0000-00'; input.maxLength = 18; }
+            else if (tipo === 'telefone') { document.getElementById('prefixoTelefone')?.classList.remove('d-none'); input.placeholder = '(11) 99999-9999'; input.maxLength = 15; }
+            else if (tipo === 'email') { input.placeholder = 'seu@email.com'; }
+        }
+
+        document.getElementById('inputChavePixModal')?.addEventListener('input', function(e) {
+            const tipo = document.getElementById('tipoChaveSelect').value;
+            let v = e.target.value.replace(/\D/g, '');
+            if (tipo === 'cpf') {
+                v = v.substring(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+                e.target.value = v;
+            } else if (tipo === 'telefone') {
+                v = v.substring(0, 11).replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+                e.target.value = v;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('inputChavePixModal');
+            if (input) {
+                document.getElementById('tipoChaveSelect').value = detectarTipoChave(input.value);
+                atualizarMascaraChave(false);
+            }
+        });
+
+        document.addEventListener("DOMContentLoaded", function() {
+            // Verifica se o usuário está logado e se o status é 2 (senha temporária)
+            {% if usuario_logado and usuario_logado.ativo == 2 %}
+                var modalSenha = new bootstrap.Modal(document.getElementById('modalMinhaSenha'));
+                modalSenha.show();
+                
+                // Opcional: exibe um alerta orientando a alteração obrigatória
+                alert("Por motivos de segurança, você está utilizando uma senha temporária. Por favor, cadastre uma nova senha.");
+            {% endif %}
+        });
+
+    </script>
+</body>
+</html>
