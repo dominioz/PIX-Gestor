@@ -27,7 +27,7 @@ mysql -u seu_usuario -p base_pix < mysql.sql
 ```
 
 **Passo 2: Configurar o Ambiente Python**
-Clone o repositório, crie um ambiente virtual e instale as dependências necessárias (Flask, SQLAlchemy, PyMySQL, qrcode, Pillow, etc.):
+Clone o repositório, crie um ambiente virtual e instale as dependências necessárias:
 ```bash
 git clone https://github.com/seu-usuario/pix-gestor.git
 cd pix-gestor
@@ -57,10 +57,50 @@ python cria_admin.py
 ```
 Isso criará o usuário `admin@seudominio.com.br` com a senha `123mudar` e um limite de 10.000 requisições mensais.
 
-**Passo 5: Iniciar o Servidor Flask**
-Para executar o ambiente, inicie a aplicação principal. O sistema rodará localmente na porta `8088`:
+**Passo 5: Iniciar o Servidor Flask Manualmente (Teste)**
+Para verificar se tudo está funcionando, inicie a aplicação manualmente (rodará na porta `8088`):
 ```bash
 python pix.py
+```
+Pressione `Ctrl+C` para encerrar.
+
+**Passo 6: Criar um Serviço no Linux (Systemd)**
+Para manter a aplicação rodando em segundo plano de forma confiável no seu servidor Linux, crie um serviço `systemd`.
+
+1. Crie o arquivo de serviço:
+```bash
+sudo nano /etc/systemd/system/pix-gestor.service
+```
+
+2. Cole o conteúdo abaixo (ajuste o caminho `/caminho/para/o/pix-gestor` para o diretório real onde você clonou o projeto e defina o `User` apropriado):
+```ini
+[Unit]
+Description=PIX Gestor - Flask API e Painel
+After=network.target mysql.service
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/caminho/para/o/pix-gestor
+Environment="PATH=/caminho/para/o/pix-gestor/venv/bin"
+ExecStart=/caminho/para/o/pix-gestor/venv/bin/python pix.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3. Recarregue os serviços, ative o PIX Gestor para iniciar no boot e inicie o serviço:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable pix-gestor
+sudo systemctl start pix-gestor
+```
+
+4. Verifique o status para garantir que está rodando sem erros:
+```bash
+sudo systemctl status pix-gestor
 ```
 
 ## 5. Como Utilizar
@@ -73,6 +113,7 @@ python pix.py
 
 ### Pela API Rest
 Utilize a sua `api_key` gerada no painel para integrar a geração PIX nos seus scripts:
+
 *   **Obter QR Code (Imagem PNG):**
     `GET /qrcode?api_key=SUA_KEY&valor=15.50&descricao=PEDIDO01`
 *   **Obter Payload (PIX Copia e Cola via JSON):**
@@ -82,7 +123,7 @@ Utilize a sua `api_key` gerada no painel para integrar a geração PIX nos seus 
 
 ## 6. Como Publicar com Proxy Reverso (Nginx)
 
-Como o Flask possui um servidor web embutido feito apenas para desenvolvimento, para produção o ideal é deixá-lo rodando de forma isolada na porta `8088` (recomendamos utilizar o `gunicorn`) e configurar o **Nginx** como Proxy Reverso. A própria aplicação já utiliza o `ProxyFix` do Werkzeug para ler os cabeçalhos de proxy com segurança.
+Para expor o serviço (que está rodando na porta 8088 pelo serviço do systemd) de forma profissional para a internet, configure o Nginx como proxy reverso.
 
 Crie um novo arquivo de configuração do Nginx (ex: `/etc/nginx/sites-available/pix_gestor`):
 
@@ -96,7 +137,7 @@ server {
     error_log /var/log/nginx/pix_gestor_error.log;
 
     location / {
-        # Encaminha o tráfego para a aplicação Flask local
+        # Encaminha o tráfego para a aplicação local gerenciada pelo systemd
         proxy_pass http://127.0.0.1:8088;
         
         # Cabeçalhos importantes para a aplicação e para o Werkzeug ProxyFix
@@ -116,4 +157,4 @@ sudo ln -s /etc/nginx/sites-available/pix_gestor /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
-*(Dica: Lembre-se de rodar o `certbot --nginx` posteriormente para instalar um certificado SSL gratuito).*
+*(Dica: Recomendamos executar `certbot --nginx` posteriormente para instalar um certificado SSL gratuito).*
