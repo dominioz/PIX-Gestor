@@ -2,7 +2,7 @@
 
 ## 1. Introdução
 O **PIX Gestor** é uma aplicação web e API desenvolvida em Python utilizando o microframework Flask. O objetivo do sistema é facilitar a geração de códigos PIX (QR Code e formato Copia e Cola) de forma estática, além de gerenciar limites mensais de geração por usuário e enviar cobranças completas por e-mail.
-Poderá visualizar este projeto online no site [https://](https://pix-qrcode.brz.dev.br/)
+Poderá visualizar este projeto online no site [https://pix-qrcode.brz.dev.br/](https://pix-qrcode.brz.dev.br/)
 
 ## 2. Explicação Básica
 O sistema é composto por duas frentes integradas:
